@@ -66,27 +66,27 @@ class Example:
     """Interactive inverse-kinematics playground for a batch of g1 robots."""
 
     DEFAULT_POSE_FILE = 'D:/src/newton/animation/Unitree_Default.xml'
-    ANIMATION_FILE = 'D:/src/newton/animation/Unitree_T-pose.xml'
+    ANIMATION_FILE = 'D:/src/newton/animation/Unitree_Getup.xml'
 
-    POS_END_EFFECTOR_NAMES = ("left_shoulder", 
-                          "left_elbow", 
-                          "left_wrist", 
-                          "right_shoulder", 
-                          "right_elbow", 
-                          "right_wrist",
-                          "left_hip", 
-                          "left_knee", 
-                          "left_ankle", 
-                          "right_hip", 
-                          "right_knee", 
-                          "right_ankle", 
-                          "torso")
+    POS_END_EFFECTOR = (["left_shoulder", 0.001], 
+                          ["left_elbow", 0.001], 
+                          ["left_wrist", 0.01], 
+                          ["right_shoulder", 0.001], 
+                          ["right_elbow", 0.001], 
+                          ["right_wrist", 0.01],
+                          ["left_hip", 0.001], 
+                          ["left_knee", 0.001], 
+                          ["left_ankle", 0.01], 
+                          ["right_hip", 0.001], 
+                          ["right_knee", 0.001], 
+                          ["right_ankle", 0.01], 
+                          ["torso", 0.001])
     
-    ROT_END_EFFECTOR_NAMES = ("left_wrist",
-                          "right_wrist", 
-                          "left_ankle",  
-                          "right_ankle") 
-#                          "torso", 
+    ROT_END_EFFECTOR = (["left_wrist", 0.01],
+                          ["right_wrist", 0.01], 
+                          ["left_ankle", 0.01],  
+                          ["right_ankle", 0.01],
+                          ["torso", 0.01]) 
 #                          "waist")
 
 
@@ -117,7 +117,6 @@ class Example:
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
 
-        self.play_animation = False
         # model(s) -----------------------------------------------------
         (
             self.model,
@@ -131,10 +130,10 @@ class Example:
         ) = self._build_model(num_envs)
 
         #throw error if the number of end effectors does not match the number of link indices
-        if (len(self.pos_ee_link_indices) != len(self.POS_END_EFFECTOR_NAMES)):
-            raise ValueError(f"pos_ee_link_indices length {len(self.pos_ee_link_indices)} does not match POS_END_EFFECTOR_NAMES length {len(self.POS_END_EFFECTOR_NAMES)}")
-        if (len(self.rot_ee_link_indices) != len(self.ROT_END_EFFECTOR_NAMES)):
-            raise ValueError(f"rot_ee_link_indices length {len(self.rot_ee_link_indices)} does not match ROT_END_EFFECTOR_NAMES length {len(self.ROT_END_EFFECTOR_NAMES)}")
+        if (len(self.pos_ee_link_indices) != len(self.POS_END_EFFECTOR)):
+            raise ValueError(f"pos_ee_link_indices length {len(self.pos_ee_link_indices)} does not match POS_END_EFFECTOR length {len(self.POS_END_EFFECTOR)}")
+        if (len(self.rot_ee_link_indices) != len(self.ROT_END_EFFECTOR)):
+            raise ValueError(f"rot_ee_link_indices length {len(self.rot_ee_link_indices)} does not match ROT_END_EFFECTOR length {len(self.ROT_END_EFFECTOR)}")
 
         # dedicated 1-env model for IK
         self.singleton_model, *_ = self._build_model(1)
@@ -157,7 +156,7 @@ class Example:
             joint_limit_upper=self.singleton_model.joint_limit_upper,
             n_problems=num_envs,
             total_residuals=total_residuals,
-            residual_offset=(len(self.POS_END_EFFECTOR_NAMES) + len(self.ROT_END_EFFECTOR_NAMES)) * 3,
+            residual_offset=(len(self.POS_END_EFFECTOR) + len(self.ROT_END_EFFECTOR)) * 3,
             weight=1.0,
         )
 
@@ -169,6 +168,8 @@ class Example:
             lambda_initial=0.1,
             jacobian_mode=ik.JacobianMode.ANALYTIC,
         )
+
+        self.rot_mapping = None
 
         # renderer & gizmos -------------------------------------------
         self.renderer = None
@@ -194,6 +195,7 @@ class Example:
         self.anim_data = self.read_joint_transforms_xml(self.ANIMATION_FILE)
         
         self.frame_count = len(self.anim_data['Ctrl_Hips'])
+        self.play_animation = False
 
     @staticmethod
     def read_joint_transforms_xml(filename):
@@ -313,8 +315,8 @@ class Example:
         pos_ee_link_offsets = [wp.vec3()] * len(pos_ee_link_indices)
 
         #left_wrist, right_wrist, left_ankle, right_ankle, torso, waist
-        #rot_ee_link_indices = [22, 29, 6, 12]#, 15, 14]  
-        rot_ee_link_indices = [22, 29, 15, 14]  
+        rot_ee_link_indices = [22, 29, 6, 12, 15]#, 14]  
+        #rot_ee_link_indices = [22, 29, 15, 14]  
         rot_ee_link_offsets = [wp.vec3()] * len(rot_ee_link_indices)
 
         return (
@@ -336,8 +338,8 @@ class Example:
         """Compute initial world-frame targets from current FK."""
         eval_fk(self.model, self.model.joint_q, self.model.joint_qd, self.state, None)
 
-        pos_num_ees = len(self.POS_END_EFFECTOR_NAMES)
-        rot_num_ees = len(self.ROT_END_EFFECTOR_NAMES)
+        pos_num_ees = len(self.POS_END_EFFECTOR)
+        rot_num_ees = len(self.ROT_END_EFFECTOR)
         tgt_pos = np.zeros((self.num_envs, pos_num_ees, 3), dtype=np.float32)
         tgt_rot = np.zeros((self.num_envs, rot_num_ees, 4), dtype=np.float32)
 
@@ -358,8 +360,8 @@ class Example:
         return tgt_pos, tgt_rot
 
     def _create_objectives(self):
-        pos_num_ees = len(self.POS_END_EFFECTOR_NAMES)
-        rot_num_ees = len(self.ROT_END_EFFECTOR_NAMES)
+        pos_num_ees = len(self.POS_END_EFFECTOR)
+        rot_num_ees = len(self.ROT_END_EFFECTOR)
         # the last num_dofs are for joint limits
         total_residuals = ( pos_num_ees + rot_num_ees ) * 3 * 2 + self.num_dofs
 
@@ -383,7 +385,7 @@ class Example:
                 n_problems=self.num_envs,
                 total_residuals=total_residuals,
                 residual_offset=ee_idx * 3,
-                weight=1,
+                weight=1.0,
             )
             position_objectives.append(obj)
 
@@ -397,7 +399,7 @@ class Example:
                 n_problems=self.num_envs,
                 total_residuals=total_residuals,
                 residual_offset=pos_num_ees * 3 + ee_idx * 3,
-                weight=1,
+                weight=1.0,
             )
             rotation_objectives.append(obj)
 
@@ -423,8 +425,8 @@ class Example:
 
     # -----------------------------------------------------------------
     # Gizmos & mouse interaction
-    # -----------------------------------------------------------------
-
+    # -------------------------------------------------------------
+    
     GIZMO_OFFSET_DISTANCE = 0.1
     GIZMO_OFFSETS = (
         np.array([0.0, GIZMO_OFFSET_DISTANCE, 0.0], dtype=np.float32),
@@ -443,9 +445,17 @@ class Example:
         np.array([0.0, 0.0, 2*GIZMO_OFFSET_DISTANCE], dtype=np.float32),
     )
     def find_rotation_target_index(self, position_index):
-        position_name = self.POS_END_EFFECTOR_NAMES[position_index]
-        if position_name in self.ROT_END_EFFECTOR_NAMES:
-            return self.ROT_END_EFFECTOR_NAMES.index(position_name)
+        if self.rot_mapping is None:
+            self.rot_mapping = {}
+            # cache it first time
+            for re_idx, (rot_name, rot_weight) in enumerate(self.ROT_END_EFFECTOR):
+                for ee_idx, (name, weight) in enumerate(self.POS_END_EFFECTOR):
+                    if name == rot_name:
+                        self.rot_mapping[ee_idx] = re_idx
+                        break
+                    
+        if position_index in self.rot_mapping:
+            return self.rot_mapping[position_index]
         else:
             return -1
         
@@ -459,7 +469,7 @@ class Example:
         # for now, it creates gizmos for position targets only
         # allow rotation change if it has the same name as a position target
         if self.tie_targets:
-            for ee_idx in range(len(self.POS_END_EFFECTOR_NAMES)):
+            for ee_idx in range(len(self.POS_END_EFFECTOR)):
                 world_pos = self.target_positions[0, ee_idx]
                 rot_idx = self.find_rotation_target_index(ee_idx)
                 if rot_idx != -1:
@@ -478,8 +488,8 @@ class Example:
                     )
         else:
             for env in range(self.num_envs):
-                for ee_idx in range(len(self.POS_END_EFFECTOR_NAMES)):
-                    gid = env * len(self.POS_END_EFFECTOR_NAMES) + ee_idx
+                for ee_idx in range(len(self.POS_END_EFFECTOR)):
+                    gid = env * len(self.POS_END_EFFECTOR) + ee_idx
                     world_pos = self.target_positions[env, ee_idx]
                     rot_idx = self.find_rotation_target_index(ee_idx)
                     if rot_idx != -1:                    
@@ -529,8 +539,8 @@ class Example:
     # callbacks -------------------------------------------------------
 
     def _on_position_dragged(self, global_id: int, new_world_pos: np.ndarray):
-        env = global_id // len(self.POS_END_EFFECTOR_NAMES)
-        ee = global_id % len(self.POS_END_EFFECTOR_NAMES)
+        env = global_id // len(self.POS_END_EFFECTOR)
+        ee = global_id % len(self.POS_END_EFFECTOR)
 
         if self.tie_targets:
             if not self._is_dragging_pos or self._last_drag_id != global_id:
@@ -553,7 +563,7 @@ class Example:
 
     def _on_rotation_dragged(self, global_id: int, new_q: np.ndarray):
         pass
-        num_ees = len(self.POS_END_EFFECTOR_NAMES)
+        num_ees = len(self.POS_END_EFFECTOR)
         env = global_id // num_ees
         ee = global_id % num_ees
 
@@ -629,7 +639,7 @@ class Example:
                 rotation = keyframe['quaternion'] * self.delta_q_data[joint_name]
                 self.target_positions[0, ee_idx] = position
                 self.position_objectives[ee_idx].set_target_position(0, wp.vec3(*position))
-                gid = env_id * len(self.POS_END_EFFECTOR_NAMES) + ee_idx
+                gid = env_id * len(self.POS_END_EFFECTOR) + ee_idx
                 self.gizmo_system.update_target_position(gid, position)
 
                 #update rotation target if it has the same name as a position target
@@ -637,7 +647,7 @@ class Example:
                 if rot_idx != -1:
                     #quat = wp.quat(rotation)
                     #rpy = quat_to_rpy(quat)
-                    print (f"updatig rotation for {self.ROT_END_EFFECTOR_NAMES[rot_idx]} rotation: {rotation}")
+                    print (f"updatig rotation for {self.ROT_END_EFFECTOR[rot_idx]} rotation: {rotation}")
                     self.target_rotations[0, rot_idx] = rotation 
                     self.gizmo_system.update_target_rotation(gid, rotation)
                     self.rotation_objectives[rot_idx].set_target_rotation(0, wp.vec4(*rotation))
