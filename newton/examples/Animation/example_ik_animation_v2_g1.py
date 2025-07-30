@@ -65,8 +65,8 @@ class FrameAlignedHandler:
 class Example:
     """Interactive inverse-kinematics playground for a batch of g1 robots."""
 
-    DEFAULT_POSE_FILE = 'D:/src/newton/animation/Unitree_Default.xml'
-    ANIMATION_FILE = 'D:/src/newton/animation/Unitree_Getup.xml'
+    DEFAULT_POSE_FILE = './newton/examples/Animation/Data/Unitree_Default.xml'
+    ANIMATION_FILE = './newton/examples/Animation/Data/Unitree_Arm_Raise.xml'
 
     POS_END_EFFECTOR = (["left_shoulder", 0.001], 
                           ["left_elbow", 0.001], 
@@ -286,6 +286,7 @@ class Example:
             newton.utils.download_asset("g1_description") / "g1_29dof_rev_1_0.xml",
             articulation_builder,
             floating=True,
+            enable_self_collisions=True,
         )
 
         # initial joint angles
@@ -460,7 +461,7 @@ class Example:
             return -1
         
     def _setup_gizmos(self):
-        self.gizmo_system = GizmoSystem(self.renderer, scale_factor=0.15, rotation_sensitivity=1.0)
+        self.gizmo_system = GizmoSystem(self.renderer, scale_factor=0.01, rotation_sensitivity=1.0)
         self.gizmo_system.set_callbacks(
             position_callback=self._on_position_dragged,
             rotation_callback=self._on_rotation_dragged,
