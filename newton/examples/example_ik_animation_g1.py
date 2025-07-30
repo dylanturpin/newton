@@ -65,8 +65,8 @@ class FrameAlignedHandler:
 class Example:
     """Interactive inverse-kinematics playground for a batch of g1 robots."""
 
-    DEFAULT_POSE_FILE = './newton/examples/Animation/Data/Unitree_Default.xml'
-    ANIMATION_FILE = './newton/examples/Animation/Data/Unitree_Arm_Raise.xml'
+    DEFAULT_POSE_FILE = './newton/examples/assets/animations/unitree_default.xml'
+    ANIMATION_FILE = './newton/examples/assets/animations/unitree_walk.xml'
 
     POS_END_EFFECTOR = (["left_shoulder", 0.001], 
                           ["left_elbow", 0.001], 
@@ -195,7 +195,7 @@ class Example:
         self.anim_data = self.read_joint_transforms_xml(self.ANIMATION_FILE)
         
         self.frame_count = len(self.anim_data['Ctrl_Hips'])
-        self.play_animation = False
+        self.play_animation = True
 
     @staticmethod
     def read_joint_transforms_xml(filename):
@@ -220,9 +220,9 @@ class Example:
             axis, angle = wp.quat_to_axis_angle(quat2)
             print(f"{name} quat: {axis}, {math.degrees(angle)}")
 
-        test_rotation_conversion(wp.vec3(0, 0, 1), "z axis")
-        test_rotation_conversion(wp.vec3(0, 1, 0), "y axis")
-        test_rotation_conversion(wp.vec3(1, 0, 0), "x axis")
+        #test_rotation_conversion(wp.vec3(0, 0, 1), "z axis")
+        #test_rotation_conversion(wp.vec3(0, 1, 0), "y axis")
+        #test_rotation_conversion(wp.vec3(1, 0, 0), "x axis")
         
         for joint_elem in root.findall('joint'):
             joint_name = joint_elem.attrib['name']
@@ -240,10 +240,10 @@ class Example:
 
                 wquat = converter * wp.quat(quaternion) * converter_inverse
                 #wquat = wp.quat(quaternion[0], quaternion[2], quaternion[1], quaternion[3])
-                print(f"joint name: {joint_name} original position: {position}, converted position: {wpos}")
-                print(f"joint name: {joint_name} original quaternion: {quaternion}, converted quaternion: {wquat}")
-                print_axis_angle(wp.quat(quaternion), f"{joint_name} original quaternion")
-                print_axis_angle(wquat, f"{joint_name} converted quaternion")
+                #print(f"joint name: {joint_name} original position: {position}, converted position: {wpos}")
+                #print(f"joint name: {joint_name} original quaternion: {quaternion}, converted quaternion: {wquat}")
+                #print_axis_angle(wp.quat(quaternion), f"{joint_name} original quaternion")
+                #print_axis_angle(wquat, f"{joint_name} converted quaternion")
                 joint_data[joint_name].append({
                     'id': key_id,
                     'position': wpos,
@@ -351,13 +351,13 @@ class Example:
                 tf = body_q_np[base + link_idx]
                 world_pos = wp.transform_point(wp.transform(tf[:3], wp.quat(*tf[3:])), self.pos_ee_link_offsets[ee_idx])
                 tgt_pos[env, ee_idx] = np.array(world_pos)
-                print(f"environment {env} effeector {ee_idx} init target position: {tgt_pos[env, ee_idx]}")
+                #print(f"environment {env} effeector {ee_idx} init target position: {tgt_pos[env, ee_idx]}")
 
             for ee_idx, link_idx in enumerate(self.rot_ee_link_indices):
                 tf = body_q_np[base + link_idx]
                 quat = tf[3:7] / np.linalg.norm(tf[3:7])
                 tgt_rot[env, ee_idx] = quat
-                print(f"environment {env} effeector {ee_idx} init target rotation: {tgt_rot[env, ee_idx]}")
+                #print(f"environment {env} effeector {ee_idx} init target rotation: {tgt_rot[env, ee_idx]}")
         return tgt_pos, tgt_rot
 
     def _create_objectives(self):
@@ -461,7 +461,7 @@ class Example:
             return -1
         
     def _setup_gizmos(self):
-        self.gizmo_system = GizmoSystem(self.renderer, scale_factor=0.01, rotation_sensitivity=1.0)
+        self.gizmo_system = GizmoSystem(self.renderer, scale_factor=0.1, rotation_sensitivity=1.0)
         self.gizmo_system.set_callbacks(
             position_callback=self._on_position_dragged,
             rotation_callback=self._on_rotation_dragged,
@@ -554,11 +554,9 @@ class Example:
             self.target_positions[:, ee] = new_targets
             self.position_objectives[ee].set_target_positions(wp.array(new_targets, dtype=wp.vec3))
             self._is_dragging_pos = False
-            print(new_targets)
         else:
             self.target_positions[env, ee] = new_world_pos
             self.position_objectives[ee].set_target_position(env, wp.vec3(*new_world_pos))
-            print(new_world_pos)
 
         self._solve()
 
@@ -610,13 +608,10 @@ class Example:
             self.rotation_objectives[rot_idx].set_target_rotations(wp.array(updated, dtype=wp.vec4))
 
             self._is_dragging_rot = False
-            print (updated)
         else:
             # untied mode: update only this environment
             self.target_rotations[env, rot_idx] = new_q
             self.rotation_objectives[rot_idx].set_target_rotation(env, wp.vec4(*new_q))
-            axis, angle = wp.quat_to_axis_angle(wp.quat(new_q))
-            print(f"new rotation: quat: {new_q}, axis: {axis}, angle: {math.degrees(angle)}")
 
         # re-solve IK
         self._solve()
@@ -630,7 +625,7 @@ class Example:
                 continue
             keyframes = self.anim_data[joint_name]
             if len(keyframes) > 0:
-                keyframe = keyframes[current_frame // 3]
+                keyframe = keyframes[current_frame]
                 key = keyframe['id']
                 # use hip's position as base offset without Z
                 #@todo: we should add rotation of hip as well
@@ -648,7 +643,7 @@ class Example:
                 if rot_idx != -1:
                     #quat = wp.quat(rotation)
                     #rpy = quat_to_rpy(quat)
-                    print (f"updatig rotation for {self.ROT_END_EFFECTOR[rot_idx]} rotation: {rotation}")
+                    #print (f"updatig rotation for {self.ROT_END_EFFECTOR[rot_idx]} rotation: {rotation}")
                     self.target_rotations[0, rot_idx] = rotation 
                     self.gizmo_system.update_target_rotation(gid, rotation)
                     self.rotation_objectives[rot_idx].set_target_rotation(0, wp.vec4(*rotation))
@@ -656,7 +651,7 @@ class Example:
         self._solve()
 
     def _advance_animation(self):
-        current_frame = (self.current_frame + 1) % (self.frame_count * 3)
+        current_frame = (self.current_frame + 1) % (self.frame_count)
         self._update_animation(current_frame)
         self.current_frame = current_frame
 
