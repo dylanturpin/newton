@@ -26,6 +26,7 @@
 ###########################################################################
 
 import warp as wp
+import numpy as np
 
 import newton
 import newton.examples
@@ -114,12 +115,18 @@ class Example:
         # Variables the solver will update
         self.joint_q = wp.array(self.model.joint_q, shape=(1, self.model.joint_coord_count))
 
+        self.joint_q_jitter = np.zeros(shape=(self.joint_q.shape[0], self.joint_q.shape[1]), dtype=wp.float32)
+        self.joint_q_jitter.fill(np.random.uniform(-0.0001, 0.0001))
         self.ik_iters = 24
         self.solver = ik.IKSolver(
             model=self.model,
             n_problems=1,
             objectives=[*self.pos_objs, *self.rot_objs, self.obj_joint_limits],
             lambda_initial=0.1,
+            optimizer=ik.IKOptimizer.LBFGS,
+            h0_scale=1.0,
+            line_search_alphas=[0.01, 0.1, 0.5, 0.75, 1.0],
+            history_len=12,            
             jacobian_mode=ik.IKJacobianMode.ANALYTIC,
         )
 
@@ -136,6 +143,8 @@ class Example:
             self.graph = cap.graph
 
     def simulate(self):
+        #@TODO: Uncomment for MIXED mode
+        #wp.copy(self.joint_q, wp.array(self.joint_q_jitter, dtype=wp.float32))
         self.solver.step(self.joint_q, self.joint_q, iterations=self.ik_iters)
 
     def _push_targets_from_gizmos(self):
